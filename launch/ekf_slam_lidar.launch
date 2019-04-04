@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+
+  <param name ="/use_sim_time" value="true"/>
+
+	
+  <rosparam command="load" file="$(find ekf_slam)/config/params.yaml" />  
+
+
+  <include file="$(find lidar_cone_detection)/launch/euclidean_clustering.launch"/>
+
+  <include file="$(find rf2o_laser_odometry)/launch/rf2o_laser_odometry.launch"/>
+
+  <node pkg="ekf_slam" type="ekf_slam" name="ekf_slam" output="screen"></node>
+</launch>
