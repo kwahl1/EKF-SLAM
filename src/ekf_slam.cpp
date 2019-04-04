@@ -225,27 +225,39 @@ public:
     return (1/q_k)*h;
   }
 
-
-  /*
-  Callback function for landmark observations. Performs maximum likelihood data association and EKF update step.
-
-  TODO: Landmark loop to pure matrix operations.
-  TODO: Move data association and update to separate functions.
-  */
-  void landmarkCallback(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
+/*
+Add potentially new landmark to mu and sigma
+*/
+  void addNewLandmark(Vector2d z)
   {
-    start_ = ros::WallTime::now();
+    // append potentially new landmark to mu and sigma
+    mu.conservativeResize(mu.rows()+2);
+    mu.tail(2) = inverseObservationModel(z(0),z(1));
 
-    timeLastMsg = msg->header.stamp;
+    sigma.conservativeResize(sigma.rows()+2,sigma.cols()+2);
+    sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
+    sigma.block(3+2*N_landmarks,0,2,3+2*N_landmarks).setZero();
+    sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2d::Identity();
+  }
+
+
+/*
+Remove last landmark from mu and sigma
+*/
+  void removeNewLandmark()
+  {
+    mu.conservativeResize(mu.rows()-2);
+    sigma.conservativeResize(sigma.rows()-2,sigma.cols()-2);
+  }
+
+/*
+Perform maximum likelihood data association given observed landmarks.
+
+TODO: Landmark loop to pure matrix operations.
+*/
+  void MLDataAssociation(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
+  {
     int N_observations = msg->sensed_data.size();
-
-    ROS_INFO("Got message. N_landmarks %i \n mu (%i) \n sigma %i,%i",N_landmarks,mu.size(),sigma.rows(),sigma.cols());
-    if(!predictMotion())
-    {
-      ROS_INFO("Skipped iteration.");
-      return;
-    }
-    ROS_INFO("Prediction done");
 
     for(int i = 0; i < N_observations; i++)
     {
@@ -257,14 +269,8 @@ public:
 
       Vector2d z_i(msg->sensed_data[i].range,msg->sensed_data[i].yaw);
 
-      // append potentially new landmark to mu and sigma
-      mu.conservativeResize(mu.rows()+2);
-      mu.tail(2) = inverseObservationModel(z_i(0),z_i(1));
-
-      sigma.conservativeResize(sigma.rows()+2,sigma.cols()+2);
-      sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
-      sigma.block(3+2*N_landmarks,0,2,3+2*N_landmarks).setZero();
-      sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2d::Identity();
+      // append z_i as potentially new landmark to mu and sigma
+      addNewLandmark(z_i);
 
       for (int k = 0; k < N_landmarks+1; k++)
       {
@@ -303,19 +309,16 @@ public:
       if (j_i+1 > N_landmarks)
       {
         //observation is a new landmark
-        H_k = MatrixXd::Zero(2,3+2*(1+N_landmarks));
-        H_k = Map<MatrixXd>( H.col(j_i).data(),2,3+2*(1+N_landmarks));
-
         N_landmarks++;
+        H_k = MatrixXd::Zero(2,3+2*N_landmarks);
+        H_k = Map<MatrixXd>( H.col(j_i).data(),2,3+2*N_landmarks);
+
       }else
       {
         // not a new landmark
         H_k = MatrixXd::Zero(2,3+2*N_landmarks);
         H_k = Map<MatrixXd>( H.col(j_i).head(2*(3+2*N_landmarks)).data(),2,3+2*N_landmarks);
-
-        // remove potentially new landmark from mu_bar and sigma_bar
-        mu.conservativeResize(mu.rows()-2);
-        sigma.conservativeResize(sigma.rows()-2,sigma.cols()-2);
+        removeNewLandmark(); // remove potentially new landmark from mu_bar and sigma_bar
       }
 
       Matrix2d psi_k;
@@ -327,13 +330,29 @@ public:
       MatrixXd I = MatrixXd::Identity(sigma.rows(),sigma.cols());
       sigma = (I-K*H_k)*sigma;
       mu(2) = constrainAngle(mu(2));
-
     }
-    ROS_INFO("N_landmarks = %i",N_landmarks);
-    ROS_INFO("Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2));
+  }
 
+
+  /*
+  Callback function for landmark observations.
+  */
+  void landmarkCallback(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
+  {
+    timeLastMsg = msg->header.stamp;
+
+    if(!predictMotion())
+    {
+      ROS_INFO("Skipped iteration.");
+      return;
+    }
+    ROS_INFO("Prediction done");
+
+    start_ = ros::WallTime::now();
+    MLDataAssociation(msg);
+    ROS_INFO("Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
     end_ = ros::WallTime::now();
-    ROS_INFO("Exectution time (ms): %f",(end_ - start_).toNSec() * 1e-6);
+    ROS_INFO("Update exectution time (ms): %f",(end_ - start_).toNSec() * 1e-6);
 
     publishTF();
     publishPose();
