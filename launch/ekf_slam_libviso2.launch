@@ -1,8 +1,11 @@
 <?xml version="1.0"?>
 <launch>
 
+  <!-- Assumes transforms broadcasted by libviso2 in bagfile-->
+
   <param name ="/use_sim_time" value="true"/>
-  <rosparam command="load" file="$(find ekf_slam)/config/params_lidar.yaml" />  
+  <rosparam command="load" file="$(find ekf_slam)/config/params_libviso.yaml" />  
+
 
   <include file="$(find lidar_cone_detection)/launch/euclidean_clustering.launch"/>
 

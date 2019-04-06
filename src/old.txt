@@ -25,15 +25,15 @@ public:
   ros::Publisher pub_markers;
   ros::Time timeLastMsg;
   ros::WallTime start_, end_;
-  VectorXf mu; // state [x,y,theta]
-  MatrixXf sigma;
-  Matrix3f R;
-  Matrix2f Q;
-  Vector3f previous_odom;
-  Vector3f odom;
-  float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency;
+  VectorXd mu; // state [x,y,theta]
+  MatrixXd sigma;
+  Matrix3d R;
+  Matrix2d Q;
+  Vector3d previous_odom;
+  Vector3d odom;
+  double mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency;
   int N_landmarks;
-  float sum_time;
+  double sum_time;
   int N_times;
 
   EKFslam(ros::NodeHandle n)
@@ -48,22 +48,22 @@ public:
 
   void init()
   {
-    mu = VectorXf::Zero(3,1);
-    sigma = MatrixXf::Zero(3,3);
-    odom = Vector3f::Zero();
-    previous_odom = Vector3f::Zero();
+    mu = VectorXd::Zero(3,1);
+    sigma = MatrixXd::Zero(3,3);
+    odom = Vector3d::Zero();
+    previous_odom = Vector3d::Zero();
     N_landmarks = 0;
     N_times = 0;
 
     // parameters loaded from config/params.yaml
-    nh.param<float>("std_motion_xy", std_motion_xy, 0.04f);
-    nh.param<float>("std_motion_theta", std_motion_theta, 0.09f);
-    nh.param<float>("std_sensor_range", std_sensor_range, 0.005f);
-    nh.param<float>("std_sensor_bearing", std_sensor_bearing, 0.5f);
-    nh.param<float>("mahalanobis_threshold", mahalanobis_threshold, 0.98f);
-    nh.param<float>("std_new_landmark", std_new_landmark, 0.1f);
-    nh.param<float>("uncertainty_scale", uncertainty_scale, 0.1f);
-    nh.param<float>("frequency", frequency, 10.0f);
+    nh.param<double>("std_motion_xy", std_motion_xy, 0.04);
+    nh.param<double>("std_motion_theta", std_motion_theta, 0.09);
+    nh.param<double>("std_sensor_range", std_sensor_range, 0.005);
+    nh.param<double>("std_sensor_bearing", std_sensor_bearing, 0.5);
+    nh.param<double>("mahalanobis_threshold", mahalanobis_threshold, 0.98);
+    nh.param<double>("std_new_landmark", std_new_landmark, 0.1);
+    nh.param<double>("uncertainty_scale", uncertainty_scale, 0.1);
+    nh.param<double>("frequency", frequency, 10.0);
 
     ROS_INFO("--- EKF SLAM Parameters ---");
     ROS_INFO("frequency: %f", frequency);
@@ -76,13 +76,13 @@ public:
     ROS_INFO("---------------------------");
 
     //motion noise
-    R = Matrix3f::Identity(3,3);
+    R = Matrix3d::Identity(3,3);
     R(0,0) = std_motion_xy;
     R(1,1) = std_motion_xy;
     R(2,2) = 2*M_PI*(std_motion_theta/360);
 
     //observation noise
-    Q = Matrix2f::Identity(2,2);
+    Q = Matrix2d::Identity(2,2);
     Q(0,0) = std_sensor_range;
     Q(1,1) = 2*M_PI*(std_sensor_bearing/360);
   }
@@ -125,8 +125,8 @@ public:
       return false;
     }
 
-    Vector3f g = odometryMotionModel();
-    Matrix3f G = jacobianOdometryMotionModel();
+    Vector3d g = odometryMotionModel();
+    Matrix3d G = jacobianOdometryMotionModel();
     previous_odom = odom; // save for next iteration
 
     mu.head(3) = mu.head(3) + g;
@@ -135,8 +135,6 @@ public:
 
     assert(G.hasNaN() == false);
     assert(sigma.hasNaN() == false);
-    assert(mu.hasNaN() == false);
-    assert(odom.hasNaN() == false);
 
     ROS_INFO("Prediction done mu=[%f,%f,%f] sigma=[%f,%f,%f]",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2));
     return true;
@@ -146,9 +144,9 @@ public:
   /*
   Set heading angle to interval [PI, -PI]
   */
-  float constrainAngle(float theta)
+  double constrainAngle(double theta)
   {
-    theta = std::fmod(theta + M_PI,2*M_PI);
+    theta = std::fmod((double) theta + M_PI, (double) 2*M_PI);
     if (theta < 0)
     {
       theta += 2*M_PI;
@@ -160,16 +158,16 @@ public:
   /*
   Compute motion from odometry increment
   */
-  Vector3f odometryMotionModel()
+  Vector3d odometryMotionModel()
   {
-    Vector3f g;
-    float d_trans,d_rot1,d_rot2;
+    Vector3d g;
+    double d_trans,d_rot1,d_rot2;
 
     d_trans = std::sqrt(pow(odom(0)-previous_odom(0),2)+pow(odom(1)-previous_odom(1),2));
     d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0));
     d_rot2 = odom(2)-previous_odom(2)-d_rot1;
 
-    g << d_trans*std::cos(mu(2)+d_rot1), d_trans*std::sin(mu(2)+d_rot1),d_rot1+d_rot2;
+    g << d_trans*cos(mu(2)+d_rot1), d_trans*sin(mu(2)+d_rot1),d_rot1+d_rot2;
 
     return g;
   }
@@ -178,16 +176,16 @@ public:
   /*
   Compute jacobian matrix of the odometry motion model
   */
-  Matrix3f jacobianOdometryMotionModel()
+  Matrix3d jacobianOdometryMotionModel()
   {
-    Matrix3f G;
-    float d_trans,d_rot1;
+    Matrix3d G;
+    double d_trans,d_rot1;
 
     d_trans = std::sqrt(pow(odom(0)-previous_odom(0),2)+pow(odom(1)-previous_odom(1),2));
     d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0));
 
-    G << 1, 0, -d_trans*std::sin(mu(2)+d_rot1),
-    0, 1, d_trans*std::cos(mu(2)+d_rot1),
+    G << 1, 0, -d_trans*sin(mu(2)+d_rot1),
+    0, 1, d_trans*cos(mu(2)+d_rot1),
     0, 0, 1;
 
     return G;
@@ -198,13 +196,13 @@ public:
   Range bearing observation model.
   Computes the expected measurement range and bearing given robots current position and landmark position x,y
   */
-  Vector2f observationModel(float x, float y)
+  Vector2d observationModel(double x, double y)
   {
-    Vector2f delta_k(x-mu(0),y-mu(1));
-    float q_k = delta_k.transpose()*delta_k;
-    float bearing = std::atan2(delta_k(1), delta_k(0)) - mu(2);
+    Vector2d delta_k(x-mu(0),y-mu(1));
+    double q_k = delta_k.transpose()*delta_k;
+    double bearing = std::atan2(delta_k(1), delta_k(0)) - mu(2);
 
-    return Vector2f(sqrt(q_k), constrainAngle(bearing));
+    return Vector2d(sqrt(q_k), constrainAngle(bearing));
   }
 
 
@@ -212,22 +210,22 @@ public:
   Inverse range bearing observation model.
   Computes the landmark position x,y given the robots position and an observed range bearing
   */
-  Vector2f inverseObservationModel(float range, float bearing)
+  Vector2d inverseObservationModel(double range, double bearing)
   {
-    return Vector2f(mu(0) + range*std::cos(mu(2)+bearing), mu(1) + range*std::sin(mu(2)+bearing));
+    return Vector2d(mu(0) + range*cos(mu(2)+bearing), mu(1) + range*sin(mu(2)+bearing));
   }
 
 
   /*
   Compute jacobian matrix of the observation model
   */
-  MatrixXf jacobianObservationModel(float x, float y)
+  MatrixXd jacobianObservationModel(double x, double y)
   {
-    MatrixXf h(2,5);
-    Vector2f delta_k(x-mu(0),y-mu(1));
-    float q_k = delta_k.transpose()*delta_k;
+    MatrixXd h(2,5);
+    Vector2d delta_k(x-mu(0),y-mu(1));
+    double q_k = delta_k.transpose()*delta_k;
 
-    h << -std::sqrt(q_k)*delta_k(0), -std::sqrt(q_k)*delta_k(1), 0, std::sqrt(q_k)*delta_k(0), std::sqrt(q_k)*delta_k(1),
+    h << -sqrt(q_k)*delta_k(0), -sqrt(q_k)*delta_k(1), 0, sqrt(q_k)*delta_k(0), sqrt(q_k)*delta_k(1),
     delta_k(1), -delta_k(0), -1, -delta_k(1), delta_k(0);
 
     return (1/q_k)*h;
@@ -237,7 +235,7 @@ public:
 /*
 Add potentially new landmark to mu and sigma
 */
-  void addNewLandmark(Vector2f z)
+  void addNewLandmark(Vector2d z)
   {
     // append potentially new landmark to mu and sigma
     mu.conservativeResize(mu.rows()+2);
@@ -246,7 +244,7 @@ Add potentially new landmark to mu and sigma
     sigma.conservativeResize(sigma.rows()+2,sigma.cols()+2);
     sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
     sigma.block(3+2*N_landmarks,0,2,3+2*N_landmarks).setZero();
-    sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
+    sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2d::Identity();
   }
 
 
@@ -262,31 +260,31 @@ Remove last landmark from mu and sigma
 
 /*
 // vectorized atan2
-  static float atan_2(float a, float b)
+  static double atan_2(double a, double b)
   {
     return std::atan2(a,b);
   }
 
-  VectorXf atan2_vector(VectorXf x, VectorXf y)
+  VectorXd atan2_vector(VectorXd x, VectorXd y)
   {
-    VectorXf theta;
+    VectorXd theta;
     theta = y.binaryExpr(x, std::ptr_fun(::atan2));
     theta = y.binaryExpr(x, std::ptr_fun(atan_2));
-    theta = y.binaryExpr(x, [] (float a, float b) { return std::atan2(a,b);} );
+    theta = y.binaryExpr(x, [] (double a, double b) { return std::atan2(a,b);} );
 
     return theta;
   }
 
   void MLMatrix(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
   {
-    float a,b,c,d;
+    double a,b,c,d;
     a = 3;
     b = 8;
     c = 6;
     d = 9;
     ROS_INFO("atan2 a,b = %f",std::atan2(a,c));
     ROS_INFO("atan2 c,d = %f",std::atan2(b,d));
-    Vector2f A,B,C;
+    Vector2d A,B,C;
     A<<a,b;
     B<<c,d;
     C = slamNode.atan2_vector(B,A);
@@ -306,19 +304,16 @@ TODO: Landmark loop to pure matrix operations.
   void MLDataAssociation(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
   {
     int N_observations = msg->sensed_data.size();
-    MatrixXf F_x_k, H, psi, nu;
-    Matrix2f psi_k;
-    VectorXf likelihood;
 
     for(int i = 0; i < N_observations; i++)
     {
       // store results for data association
-      likelihood.resize(N_landmarks+1);
-      H.resize(2*(3+2*(1+N_landmarks)),N_landmarks+1);
-      psi.resize(4,N_landmarks+1);
-      nu.resize(2,N_landmarks+1);
+      VectorXd likelihood = VectorXd::Zero(N_landmarks+1,1);
+      MatrixXd H(2*(3+2*(1+N_landmarks)),N_landmarks+1);
+      MatrixXd psi(4,N_landmarks+1);
+      MatrixXd z_bar(2,N_landmarks+1);
 
-      Vector2f z_i((float) msg->sensed_data[i].range, (float) msg->sensed_data[i].yaw);
+      Vector2d z_i(msg->sensed_data[i].range,msg->sensed_data[i].yaw);
 
       // append z_i as potentially new landmark to mu and sigma
       addNewLandmark(z_i);
@@ -326,71 +321,60 @@ TODO: Landmark loop to pure matrix operations.
       for (int k = 0; k < N_landmarks+1; k++)
       {
 
-        Vector2f z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
-        F_x_k.resize(5,3+2*(N_landmarks+1));
-        //F_x_k << MatrixXf::Identity(3,3+2*(1+N_landmarks)), MatrixXf::Zero(2,3+2*(1+N_landmarks));
-        F_x_k.setZero();
-        F_x_k(0,0) = 1;
-        F_x_k(1,1) = 1;
-        F_x_k(2,2) = 1;
+        Vector2d z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
+        MatrixXd F_x_k(5,3+2*(N_landmarks+1));
+        F_x_k << MatrixXd::Identity(3,3+2*(1+N_landmarks)),
+        MatrixXd::Zero(2,3+2*(1+N_landmarks));
         F_x_k(3,3+2*k) = 1;
         F_x_k(4,4+2*k) = 1;
 
-        MatrixXf H_k;
-        //Matrix2f psi_k;
-        H_k.noalias() = jacobianObservationModel(mu(3+2*k),mu(4+2*k))*F_x_k;
-        //H_k.noalias() = h_k*F_x_k;
-        psi_k.noalias() = H_k*sigma*H_k.transpose()+Q;
+        MatrixXd h_k = jacobianObservationModel(mu(3+2*k),mu(4+2*k));
+        MatrixXd H_k = h_k*F_x_k;
+        Matrix2d psi_k = H_k*sigma*H_k.transpose()+Q;
 
-        Vector2f nu_k = z_i-z_bar_k;
-        nu_k(1) = constrainAngle(nu_k(1));
-        likelihood(k) = (1/(2*M_PI*sqrt(psi_k.determinant())))*exp(-0.5*nu_k.transpose()*psi_k.inverse()*nu_k);
+        Vector2d nu = z_i-z_bar_k;
+        nu(1) = constrainAngle(nu(1));
+        likelihood(k) = (1/(2*M_PI*sqrt(psi_k.determinant())))*exp(-0.5*nu.transpose()*psi_k.inverse()*nu);
 
         // save for later
-        nu.col(k) = nu_k;
-        H.col(k) = VectorXf(Map<VectorXf>(H_k.data(), H_k.cols()*H_k.rows()));
-        psi.col(k) = Vector4f(Map<Vector4f>(psi_k.data(), psi_k.cols()*psi_k.rows()));
+        z_bar.col(k) = z_bar_k;
+        H.col(k) = VectorXd(Map<VectorXd>(H_k.data(), H_k.cols()*H_k.rows()));
+        psi.col(k) = Vector4d(Map<Vector4d>(psi_k.data(), psi_k.cols()*psi_k.rows()));
 
         //debug
-        //assert(psi_k.hasNaN() == false);
-        //assert(nu.hasNaN() == false);
-        //assert(h_k.hasNaN() == false);
-        //assert(H.hasNaN() == false);
-        //assert(likelihood.hasNaN() == false);
+        assert(psi_k.hasNaN() == false);
+        assert(nu.hasNaN() == false);
+        assert(likelihood.hasNaN() == false);
       }
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
-      //assert(likelihood.hasNaN() == false);
-      VectorXf::Index ind;
+      VectorXd::Index ind;
       likelihood.maxCoeff(&ind); // get index for maximum likelihood
       int j_i = (int) ind;
 
-      MatrixXf H_k;
-      if (j_i == N_landmarks)
+      MatrixXd H_k;
+      if (j_i+1 > N_landmarks)
       {
         //observation is a new landmark
         N_landmarks++;
-        //H_k.resize(2,3+2*N_landmarks);
-        //H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
+        H_k = MatrixXd::Zero(2,3+2*N_landmarks);
+        H_k = Map<MatrixXd>( H.col(j_i).data(),2,3+2*N_landmarks);
 
       }else
       {
         // not a new landmark
-        //H_k.resize(2,3+2*N_landmarks);
-        //H_k = Map<MatrixXf>( H.col(j_i).head(2*(3+2*N_landmarks)).data(),2,3+2*N_landmarks);
+        H_k = MatrixXd::Zero(2,3+2*N_landmarks);
+        H_k = Map<MatrixXd>( H.col(j_i).head(2*(3+2*N_landmarks)).data(),2,3+2*N_landmarks);
         removeNewLandmark(); // remove potentially new landmark from mu_bar and sigma_bar
       }
-      H_k.resize(2,3+2*N_landmarks);
-      H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
 
-      //Matrix2f psi_k;
-      MatrixXf K;
-      psi_k =  Map<Matrix2f>( psi.col(j_i).data(),2,2);
-      K.noalias() = sigma*H_k.transpose()*psi_k.inverse();
+      Matrix2d psi_k;
+      psi_k =  Map<Matrix2d>( psi.col(j_i).data(),2,2);
+      MatrixXd K = sigma*H_k.transpose()*psi_k.inverse();
 
       // Update state belief
-      mu.noalias() += K*nu.col(j_i);
-      //I = MatrixXf::Identity(sigma.rows(),sigma.cols());
-      sigma = (MatrixXf::Identity(sigma.rows(),sigma.cols())-K*H_k)*sigma;
+      mu = mu + K*(z_i-z_bar.col(j_i));
+      MatrixXd I = MatrixXd::Identity(sigma.rows(),sigma.cols());
+      sigma = (I-K*H_k)*sigma;
       mu(2) = constrainAngle(mu(2));
     }
   }
@@ -414,7 +398,7 @@ TODO: Landmark loop to pure matrix operations.
     MLDataAssociation(msg);
     ROS_INFO("Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
     end_ = ros::WallTime::now();
-    float timex = (end_ - start_).toNSec() * 1e-6;
+    double timex = (end_ - start_).toNSec() * 1e-6;
     ROS_INFO("Update exectution time (ms): %f",timex);
     sum_time += timex;
     N_times++;
@@ -565,3 +549,4 @@ int main(int argc, char **argv)
 
   return 0;
 }
+

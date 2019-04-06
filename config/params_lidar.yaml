@@ -1,0 +1,13 @@
+ekf_slam:
+  std_motion_xy: 0.02
+  std_motion_theta: 1 #0.1 #degrees
+
+  std_sensor_range: 0.02
+  std_sensor_bearing: 0.2 #degrees
+
+  std_new_landmark: 100000
+
+  mahalanobis_threshold: 0.92
+  frequency: 10.0
+  uncertainty_scale: 10 # scale visualization of landmark covariances
+
