@@ -1,3 +1,5 @@
+#define EIGEN_NO_AUTOMATIC_RESIZING = 1;
+
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <sensor_msgs/PointCloud.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -9,9 +11,10 @@
 #include <tf/transform_broadcaster.h>
 #include <eigen3/Eigen/Dense>
 #include <cassert>
-
+#include <iostream>
 
 using namespace Eigen;
+
 
 class EKFslam
 {
@@ -244,9 +247,11 @@ Add potentially new landmark to mu and sigma
     mu.tail(2) = inverseObservationModel(z(0),z(1));
 
     sigma.conservativeResize(sigma.rows()+2,sigma.cols()+2);
+    //sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
     sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
     sigma.block(3+2*N_landmarks,0,2,3+2*N_landmarks).setZero();
     sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
+    assert(sigma.hasNaN() == false);
   }
 
 
@@ -261,47 +266,7 @@ Remove last landmark from mu and sigma
 
 
 /*
-// vectorized atan2
-  static float atan_2(float a, float b)
-  {
-    return std::atan2(a,b);
-  }
-
-  VectorXf atan2_vector(VectorXf x, VectorXf y)
-  {
-    VectorXf theta;
-    theta = y.binaryExpr(x, std::ptr_fun(::atan2));
-    theta = y.binaryExpr(x, std::ptr_fun(atan_2));
-    theta = y.binaryExpr(x, [] (float a, float b) { return std::atan2(a,b);} );
-
-    return theta;
-  }
-
-  void MLMatrix(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
-  {
-    float a,b,c,d;
-    a = 3;
-    b = 8;
-    c = 6;
-    d = 9;
-    ROS_INFO("atan2 a,b = %f",std::atan2(a,c));
-    ROS_INFO("atan2 c,d = %f",std::atan2(b,d));
-    Vector2f A,B,C;
-    A<<a,b;
-    B<<c,d;
-    C = slamNode.atan2_vector(B,A);
-    ROS_INFO("vector atan2 a b = %f",C(0));
-    ROS_INFO("vector atan2 c,d= %f", C(1));
-
-  }
-  */
-
-
-
-/*
 Perform maximum likelihood data association given observed landmarks.
-
-TODO: Landmark loop to pure matrix operations.
 */
   void MLDataAssociation(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
   {
@@ -309,6 +274,7 @@ TODO: Landmark loop to pure matrix operations.
     MatrixXf F_x_k, H, psi, nu;
     Matrix2f psi_k;
     VectorXf likelihood;
+    Vector2f z_bar_k, nu_k;
 
     for(int i = 0; i < N_observations; i++)
     {
@@ -325,10 +291,9 @@ TODO: Landmark loop to pure matrix operations.
 
       for (int k = 0; k < N_landmarks+1; k++)
       {
+        z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
 
-        Vector2f z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
         F_x_k.resize(5,3+2*(N_landmarks+1));
-        //F_x_k << MatrixXf::Identity(3,3+2*(1+N_landmarks)), MatrixXf::Zero(2,3+2*(1+N_landmarks));
         F_x_k.setZero();
         F_x_k(0,0) = 1;
         F_x_k(1,1) = 1;
@@ -337,12 +302,10 @@ TODO: Landmark loop to pure matrix operations.
         F_x_k(4,4+2*k) = 1;
 
         MatrixXf H_k;
-        //Matrix2f psi_k;
         H_k.noalias() = jacobianObservationModel(mu(3+2*k),mu(4+2*k))*F_x_k;
-        //H_k.noalias() = h_k*F_x_k;
         psi_k.noalias() = H_k*sigma*H_k.transpose()+Q;
 
-        Vector2f nu_k = z_i-z_bar_k;
+        nu_k = z_i-z_bar_k;
         nu_k(1) = constrainAngle(nu_k(1));
         likelihood(k) = (1/(2*M_PI*sqrt(psi_k.determinant())))*exp(-0.5*nu_k.transpose()*psi_k.inverse()*nu_k);
 
@@ -359,7 +322,6 @@ TODO: Landmark loop to pure matrix operations.
         //assert(likelihood.hasNaN() == false);
       }
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
-      //assert(likelihood.hasNaN() == false);
       VectorXf::Index ind;
       likelihood.maxCoeff(&ind); // get index for maximum likelihood
       int j_i = (int) ind;
@@ -369,27 +331,20 @@ TODO: Landmark loop to pure matrix operations.
       {
         //observation is a new landmark
         N_landmarks++;
-        //H_k.resize(2,3+2*N_landmarks);
-        //H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
-
       }else
       {
         // not a new landmark
-        //H_k.resize(2,3+2*N_landmarks);
-        //H_k = Map<MatrixXf>( H.col(j_i).head(2*(3+2*N_landmarks)).data(),2,3+2*N_landmarks);
         removeNewLandmark(); // remove potentially new landmark from mu_bar and sigma_bar
       }
       H_k.resize(2,3+2*N_landmarks);
       H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
 
-      //Matrix2f psi_k;
       MatrixXf K;
       psi_k =  Map<Matrix2f>( psi.col(j_i).data(),2,2);
       K.noalias() = sigma*H_k.transpose()*psi_k.inverse();
 
       // Update state belief
       mu.noalias() += K*nu.col(j_i);
-      //I = MatrixXf::Identity(sigma.rows(),sigma.cols());
       sigma = (MatrixXf::Identity(sigma.rows(),sigma.cols())-K*H_k)*sigma;
       mu(2) = constrainAngle(mu(2));
     }
@@ -555,7 +510,6 @@ int main(int argc, char **argv)
   ros::NodeHandle n("~");
   EKFslam slamNode(n);
   ros::Rate r(slamNode.frequency);
-
 
   while (ros::ok())
   {

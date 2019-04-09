@@ -8,6 +8,6 @@ ekf_slam:
   std_new_landmark: 100000
 
   mahalanobis_threshold: 0.92
-  frequency: 10.0
+  frequency: 14.0
   uncertainty_scale: 10 # scale visualization of landmark covariances
 
