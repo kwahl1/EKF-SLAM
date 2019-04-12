@@ -7,6 +7,7 @@
 #include <mrpt_msgs/ObservationRangeBearing.h>
 #include <ros/ros.h>
 #include <cmath>
+#include <math.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_broadcaster.h>
 #include <eigen3/Eigen/Dense>
@@ -63,7 +64,7 @@ public:
     nh.param<float>("std_motion_theta", std_motion_theta, 0.09f);
     nh.param<float>("std_sensor_range", std_sensor_range, 0.005f);
     nh.param<float>("std_sensor_bearing", std_sensor_bearing, 0.5f);
-    nh.param<float>("mahalanobis_threshold", mahalanobis_threshold, 0.98f);
+    nh.param<float>("mahalanobis_threshold", mahalanobis_threshold, 5.991f);
     nh.param<float>("std_new_landmark", std_new_landmark, 0.1f);
     nh.param<float>("uncertainty_scale", uncertainty_scale, 0.1f);
     nh.param<float>("frequency", frequency, 10.0f);
@@ -78,16 +79,40 @@ public:
     ROS_INFO("std_new_landmark: %f", std_new_landmark);
     ROS_INFO("---------------------------");
 
-    //motion noise
-    R = Matrix3f::Identity(3,3);
-    R(0,0) = std_motion_xy;
-    R(1,1) = std_motion_xy;
-    R(2,2) = 2*M_PI*(std_motion_theta/360);
+    //std::chi_squared_distribution<float> distribution(2.0);
+    //float test = distribution(0.05f);
+    //ROS_INFO("Distance: %f",test);
+    bool do_square = false;
 
-    //observation noise
-    Q = Matrix2f::Identity(2,2);
-    Q(0,0) = std_sensor_range;
-    Q(1,1) = 2*M_PI*(std_sensor_bearing/360);
+    if (do_square)
+    {
+      R = Matrix3f::Identity(3,3);
+      R(0,0) = pow(std_motion_xy,2);
+      R(1,1) = pow(std_motion_xy,2);
+      R(2,2) = pow(2*M_PI*(std_motion_theta/360),2);
+
+      //observation noise
+      Q = Matrix2f::Identity(2,2);
+      Q(0,0) = pow(std_sensor_range,2);
+      Q(1,1) = pow(2*M_PI*(std_sensor_bearing/360),2);
+    }else
+    {
+      R = Matrix3f::Identity(3,3);
+      R(0,0) = std_motion_xy;
+      R(1,1) = std_motion_xy;
+      R(2,2) = 2*M_PI*(std_motion_theta/360);
+
+      //observation noise
+      Q = Matrix2f::Identity(2,2);
+      Q(0,0) = std_sensor_range;
+      Q(1,1) = 2*M_PI*(std_sensor_bearing/360);
+    }
+    //motion noise
+
+    ROS_INFO_STREAM("R: \n"<<R);
+    ROS_INFO_STREAM("Q: \n"<<Q);
+
+
   }
 
 
@@ -100,7 +125,7 @@ public:
     try
     {
       tf_listener.waitForTransform("/odom", "/base_link",
-      timeLastMsg, ros::Duration(0.2));
+      timeLastMsg, ros::Duration(0.09));
       tf_listener.lookupTransform("/odom", "/base_link", timeLastMsg, transform);
     }
     catch (tf::TransformException ex){
@@ -130,16 +155,17 @@ public:
 
     Vector3f g = odometryMotionModel();
     Matrix3f G = jacobianOdometryMotionModel();
+
+    if ((odom.head(2)-previous_odom.head(2)).norm() > 2)
+    {
+      ROS_WARN("Large prediction norm: %f",(odom.head(2)-previous_odom.head(2)).norm());
+      return false;
+    }
     previous_odom = odom; // save for next iteration
 
     mu.head(3) = mu.head(3) + g;
     mu(2) = constrainAngle(mu(2));
     sigma.block(0,0,3,3) = G*sigma.block(0,0,3,3)*G.transpose()+R;
-
-    assert(G.hasNaN() == false);
-    assert(sigma.hasNaN() == false);
-    assert(mu.hasNaN() == false);
-    assert(odom.hasNaN() == false);
 
     ROS_INFO("Prediction done mu=[%f,%f,%f] sigma=[%f,%f,%f]",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2));
     return true;
@@ -231,7 +257,7 @@ public:
     float q_k = delta_k.transpose()*delta_k;
 
     h << -std::sqrt(q_k)*delta_k(0), -std::sqrt(q_k)*delta_k(1), 0, std::sqrt(q_k)*delta_k(0), std::sqrt(q_k)*delta_k(1),
-    delta_k(1), -delta_k(0), -1, -delta_k(1), delta_k(0);
+    delta_k(1), -delta_k(0), -q_k, -delta_k(1), delta_k(0);
 
     return (1/q_k)*h;
   }
@@ -247,11 +273,9 @@ Add potentially new landmark to mu and sigma
     mu.tail(2) = inverseObservationModel(z(0),z(1));
 
     sigma.conservativeResize(sigma.rows()+2,sigma.cols()+2);
-    //sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
     sigma.block(0,3+2*N_landmarks,3+2*N_landmarks,2).setZero();
     sigma.block(3+2*N_landmarks,0,2,3+2*N_landmarks).setZero();
     sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
-    assert(sigma.hasNaN() == false);
   }
 
 
@@ -275,6 +299,7 @@ Perform maximum likelihood data association given observed landmarks.
     Matrix2f psi_k;
     VectorXf likelihood;
     Vector2f z_bar_k, nu_k;
+    ROS_INFO("MLDataAssociation. N_landmarks: %i, N_observations: %i",N_landmarks,N_observations);
 
     for(int i = 0; i < N_observations; i++)
     {
@@ -283,17 +308,20 @@ Perform maximum likelihood data association given observed landmarks.
       H.resize(2*(3+2*(1+N_landmarks)),N_landmarks+1);
       psi.resize(4,N_landmarks+1);
       nu.resize(2,N_landmarks+1);
+      Vector2f mu_prev = mu.head(2);
 
       Vector2f z_i((float) msg->sensed_data[i].range, (float) msg->sensed_data[i].yaw);
 
       // append z_i as potentially new landmark to mu and sigma
       addNewLandmark(z_i);
 
+      // add landmark function, size of F-x_k, loop n_landmarks,
       for (int k = 0; k < N_landmarks+1; k++)
       {
+        //ROS_INFO("Observation: %i, Landmark: %i",i,k);
         z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
 
-        F_x_k.resize(5,3+2*(N_landmarks+1));
+        F_x_k.resize(5,3+2*(N_landmarks+1)); //landmarks+1
         F_x_k.setZero();
         F_x_k(0,0) = 1;
         F_x_k(1,1) = 1;
@@ -305,32 +333,44 @@ Perform maximum likelihood data association given observed landmarks.
         H_k.noalias() = jacobianObservationModel(mu(3+2*k),mu(4+2*k))*F_x_k;
         psi_k.noalias() = H_k*sigma*H_k.transpose()+Q;
 
-        nu_k = z_i-z_bar_k;
-        nu_k(1) = constrainAngle(nu_k(1));
-        likelihood(k) = (1/(2*M_PI*sqrt(psi_k.determinant())))*exp(-0.5*nu_k.transpose()*psi_k.inverse()*nu_k);
+        if (k==N_landmarks)
+        {
+          nu_k = Vector2f::Zero();
+        }else
+        {
+          nu_k = z_i-z_bar_k;
+          nu_k(1) = constrainAngle(nu_k(1));
+        }
+
+        likelihood(k) = nu_k.transpose()*psi_k.inverse()*nu_k;
+        if (likelihood(k) < 0)
+        {
+          //likelihood(k) = -likelihood(k);
+          ROS_ERROR("likelihood is < 0");
+        }
 
         // save for later
         nu.col(k) = nu_k;
         H.col(k) = VectorXf(Map<VectorXf>(H_k.data(), H_k.cols()*H_k.rows()));
         psi.col(k) = Vector4f(Map<Vector4f>(psi_k.data(), psi_k.cols()*psi_k.rows()));
-
-        //debug
-        //assert(psi_k.hasNaN() == false);
-        //assert(nu.hasNaN() == false);
-        //assert(h_k.hasNaN() == false);
-        //assert(H.hasNaN() == false);
-        //assert(likelihood.hasNaN() == false);
       }
+
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
+      //ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
       VectorXf::Index ind;
-      likelihood.maxCoeff(&ind); // get index for maximum likelihood
+      likelihood.minCoeff(&ind); // get index for maximum likelihood
       int j_i = (int) ind;
 
       MatrixXf H_k;
+      bool new_landmark = false;
       if (j_i == N_landmarks)
       {
         //observation is a new landmark
+        //ROS_WARN("Observation is new landmark. j_i: %i, N_landmarks: %i, likeli.length(): %i",j_i,N_landmarks,likelihood.rows());
+        //ROS_INFO_STREAM("Nu: "<<nu.col(j_i));
+        sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
         N_landmarks++;
+        new_landmark = true;
       }else
       {
         // not a new landmark
@@ -345,8 +385,30 @@ Perform maximum likelihood data association given observed landmarks.
 
       // Update state belief
       mu.noalias() += K*nu.col(j_i);
-      sigma = (MatrixXf::Identity(sigma.rows(),sigma.cols())-K*H_k)*sigma;
+      MatrixXf I = MatrixXf::Identity(sigma.rows(),sigma.cols());
+      sigma = (I-K*H_k)*sigma;
+      //sigma = 0.5*sigma+0.5*sigma.transpose();
       mu(2) = constrainAngle(mu(2));
+      //ROS_INFO_STREAM("New sigma\n"<<sigma.diagonal().transpose());
+      //ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
+      if ((mu.head(2)-mu_prev).norm() > 1)
+      {
+        ROS_WARN("Large update norm: %f",(mu.head(2)-mu_prev).norm());
+        assert(K.hasNaN() == false);
+        assert(sigma.hasNaN() == false);
+        assert(psi_k.hasNaN() ==false);
+        assert(mu.hasNaN() == false);
+        ROS_INFO_STREAM("K: "<<K);
+        ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
+        ROS_INFO_STREAM("nu: "<<nu.col(j_i));
+        ROS_INFO("N_landmarks: %i, j_i: %i",N_landmarks,j_i);
+      }
+      
+      if ( new_landmark && (nu.col(j_i).norm()) > 0)
+      {
+        ROS_ERROR("New landmark but innovation not 0. j_i: %i, N_landmarks: %i",j_i,N_landmarks);
+        ROS_INFO_STREAM("Nu: "<<nu.col(j_i));
+      }
     }
   }
 
@@ -357,15 +419,16 @@ Perform maximum likelihood data association given observed landmarks.
   void landmarkCallback(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
   {
     timeLastMsg = msg->header.stamp;
+    start_ = ros::WallTime::now();
 
     if(!predictMotion())
     {
       ROS_INFO("Skipped iteration.");
       return;
     }
-    ROS_INFO("Prediction done");
+    //ROS_INFO("Prediction done");
 
-    start_ = ros::WallTime::now();
+
     MLDataAssociation(msg);
     ROS_INFO("Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
     end_ = ros::WallTime::now();
@@ -407,7 +470,7 @@ Perform maximum likelihood data association given observed landmarks.
     }
 
     tf::Transform odom_to_map_tf = tf::Transform(tf::Quaternion(odom_to_map.getRotation()), tf::Point(odom_to_map.getOrigin()));
-    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg, "/map", "/odom");
+    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg+ros::Duration(0.09), "/map", "/odom");
     tf_broadcaster.sendTransform(map_to_odom);
   }
 
