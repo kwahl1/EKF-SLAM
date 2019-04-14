@@ -135,7 +135,7 @@ public:
 
     odom(0) = transform.getOrigin().x();
     odom(1) = transform.getOrigin().y();
-    odom(2) = tf::getYaw(transform.getRotation());
+    odom(2) = (float) tf::getYaw(transform.getRotation());
     odom(2) = constrainAngle(odom(2));
 
     return true;
@@ -156,10 +156,12 @@ public:
     Vector3f g = odometryMotionModel();
     Matrix3f G = jacobianOdometryMotionModel();
 
-    if ((odom.head(2)-previous_odom.head(2)).norm() > 2)
+    if ((odom.head(2)-previous_odom.head(2)).norm() > 1)
     {
       ROS_WARN("Large prediction norm: %f",(odom.head(2)-previous_odom.head(2)).norm());
-      return false;
+      ROS_INFO_STREAM("Odom: "<<odom);
+      ROS_INFO_STREAM("previous_odom: "<<previous_odom);
+      //return false;
     }
     previous_odom = odom; // save for next iteration
 
@@ -195,7 +197,7 @@ public:
     float d_trans,d_rot1,d_rot2;
 
     d_trans = std::sqrt(pow(odom(0)-previous_odom(0),2)+pow(odom(1)-previous_odom(1),2));
-    d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0));
+    d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0))-previous_odom(2);
     d_rot2 = odom(2)-previous_odom(2)-d_rot1;
 
     g << d_trans*std::cos(mu(2)+d_rot1), d_trans*std::sin(mu(2)+d_rot1),d_rot1+d_rot2;
@@ -213,7 +215,7 @@ public:
     float d_trans,d_rot1;
 
     d_trans = std::sqrt(pow(odom(0)-previous_odom(0),2)+pow(odom(1)-previous_odom(1),2));
-    d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0));
+    d_rot1 = std::atan2(odom(1)-previous_odom(1),odom(0)-previous_odom(0))-previous_odom(2);
 
     G << 1, 0, -d_trans*std::sin(mu(2)+d_rot1),
     0, 1, d_trans*std::cos(mu(2)+d_rot1),
@@ -336,6 +338,7 @@ Perform maximum likelihood data association given observed landmarks.
         if (k==N_landmarks)
         {
           nu_k = Vector2f::Zero();
+          //psi_k = 1000*Matrix2f::Identity();
         }else
         {
           nu_k = z_i-z_bar_k;
@@ -345,7 +348,7 @@ Perform maximum likelihood data association given observed landmarks.
         likelihood(k) = nu_k.transpose()*psi_k.inverse()*nu_k;
         if (likelihood(k) < 0)
         {
-          //likelihood(k) = -likelihood(k);
+          likelihood(k) = -likelihood(k);
           ROS_ERROR("likelihood is < 0");
         }
 
@@ -356,7 +359,7 @@ Perform maximum likelihood data association given observed landmarks.
       }
 
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
-      //ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
+      ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
       VectorXf::Index ind;
       likelihood.minCoeff(&ind); // get index for maximum likelihood
       int j_i = (int) ind;
@@ -368,7 +371,7 @@ Perform maximum likelihood data association given observed landmarks.
         //observation is a new landmark
         //ROS_WARN("Observation is new landmark. j_i: %i, N_landmarks: %i, likeli.length(): %i",j_i,N_landmarks,likelihood.rows());
         //ROS_INFO_STREAM("Nu: "<<nu.col(j_i));
-        sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
+        //sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
         N_landmarks++;
         new_landmark = true;
       }else
@@ -403,7 +406,7 @@ Perform maximum likelihood data association given observed landmarks.
         ROS_INFO_STREAM("nu: "<<nu.col(j_i));
         ROS_INFO("N_landmarks: %i, j_i: %i",N_landmarks,j_i);
       }
-      
+
       if ( new_landmark && (nu.col(j_i).norm()) > 0)
       {
         ROS_ERROR("New landmark but innovation not 0. j_i: %i, N_landmarks: %i",j_i,N_landmarks);
@@ -502,7 +505,7 @@ Perform maximum likelihood data association given observed landmarks.
       {
         marker.scale.x = uncertainty_scale*sigma(3+2*i,3+2*i);
         marker.scale.y = uncertainty_scale*sigma(4+2*i,4+2*i);
-        marker.scale.z = 0.05;
+        marker.scale.z = 0.001;
       }
       marker.color.a = 1.0;
       marker.color.r = 1.0;

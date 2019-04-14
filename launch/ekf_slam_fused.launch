@@ -12,4 +12,8 @@
 
   <node pkg="ekf_slam" type="ekf_slam" name="ekf_slam" output="screen"></node>
 
+  <node pkg="rviz" type="rviz" name="rviz_nav" output="screen" args="-d $(find ekf_slam)/rviz/rviz_conf_fused.rviz"></node>
+
+  <node pkg="slam_tools" type="visualize_paths" name="path_visualize"/>
+
 </launch>
