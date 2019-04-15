@@ -1,0 +1,4 @@
+#Command to remove odom->base_link tf from bagfile:
+
+rosbag filter input.bag output.bag 'topic != "/tf" or m.transforms[0].header.frame_id != "/odom"'
+
