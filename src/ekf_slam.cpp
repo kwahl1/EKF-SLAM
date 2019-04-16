@@ -12,6 +12,19 @@ using namespace Eigen;
 class EKFslam
 {
 public:
+  float frequency;
+
+  EKFslam(ros::NodeHandle n)
+  {
+    nh = n;
+    sub_landmarks = nh.subscribe<mrpt_msgs::ObservationRangeBearing>("/landmark",1,&EKFslam::landmarkCallback,this);
+    pub_mu = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/ekf_state",1);
+    pub_pcl= nh.advertise<sensor_msgs::PointCloud>("/ekf_map",1);
+    pub_markers = nh.advertise<visualization_msgs::MarkerArray>( "/ekf_covariance",1);
+    this->init();
+  }
+
+private:
   ros::NodeHandle nh;
   tf::TransformListener tf_listener;
   tf::TransformBroadcaster tf_broadcaster;
@@ -24,20 +37,11 @@ public:
   Matrix3f R;
   Vector3f odom, previous_odom;
   Matrix2f Q;
-  float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency, sum_time;
-  int N_landmarks, N_times;
+  float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, sum_time;
+  int N_landmarks, N_iterations;
   bool verbose;
 
 
-  EKFslam(ros::NodeHandle n)
-  {
-    nh = n;
-    sub_landmarks = nh.subscribe<mrpt_msgs::ObservationRangeBearing>("/landmark",1,&EKFslam::landmarkCallback,this);
-    pub_mu = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/ekf_state",1);
-    pub_pcl= nh.advertise<sensor_msgs::PointCloud>("/ekf_map",1);
-    pub_markers = nh.advertise<visualization_msgs::MarkerArray>( "/ekf_covariance",1);
-    this->init();
-  }
 
   void init()
   {
@@ -51,7 +55,7 @@ public:
     previous_odom = Vector3f::Zero();
     ROS_INFO("initing4");
     N_landmarks = 0;
-    N_times = 0;
+    N_iterations = 0;
     ROS_INFO("get params");
 
     // parameters loaded from config/
@@ -277,7 +281,6 @@ Perform maximum likelihood data association given observed landmarks.
     Matrix2f psi_k;
     VectorXf likelihood;
     Vector2f z_bar_k, nu_k;
-    ROS_INFO_COND(verbose,"MLDataAssociation. N_landmarks: %i, N_observations: %i",N_landmarks,N_observations);
 
     for(int i = 0; i < N_observations; i++)
     {
@@ -296,10 +299,9 @@ Perform maximum likelihood data association given observed landmarks.
       // add landmark function, size of F-x_k, loop n_landmarks,
       for (int k = 0; k < N_landmarks+1; k++)
       {
-        //ROS_INFO("Observation: %i, Landmark: %i",i,k);
         z_bar_k = observationModel(mu(3+2*k),mu(4+2*k));
 
-        F_x_k.resize(5,3+2*(N_landmarks+1)); //landmarks+1
+        F_x_k.resize(5,3+2*(N_landmarks+1));
         F_x_k.setZero();
         F_x_k(0,0) = 1;
         F_x_k(1,1) = 1;
@@ -311,18 +313,18 @@ Perform maximum likelihood data association given observed landmarks.
         H_k.noalias() = jacobianObservationModel(mu(3+2*k),mu(4+2*k))*F_x_k;
         psi_k.noalias() = H_k*sigma*H_k.transpose()+Q;
 
-        if (k==N_landmarks)
-        {
-          nu_k = Vector2f::Zero();
-        }else
-        {
-          nu_k = z_i-z_bar_k;
-          nu_k(1) = constrainAngle(nu_k(1));
-        }
+        nu_k = z_i-z_bar_k;
+        nu_k(1) = constrainAngle(nu_k(1));
 
         likelihood(k) = nu_k.transpose()*psi_k.inverse()*nu_k;
         if (likelihood(k) < 0)
         {
+          // this is a bug. Shutdown node if it happens.
+          /* if psi_k not positive semi definite:
+          -> psi_k.inverse() negative -> negative likelihood
+          -> incorrect data association when minimizing likelihood
+          -> ekf diverges
+          */
           ROS_ERROR("likelihood is < 0");
           ros::shutdown();
         }
@@ -334,22 +336,14 @@ Perform maximum likelihood data association given observed landmarks.
       }
 
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
-      VectorXf::Index ind;
-      likelihood.minCoeff(&ind); // get index for maximum likelihood
-      int j_i = (int) ind;
+      VectorXf::Index j_i;
+      likelihood.minCoeff(&j_i); // get index for maximum likelihood
+
+      bool new_landmark = ((int) j_i == N_landmarks);
+      if(!new_landmark){ removeNewLandmark(); } // remove potentially new landmark from mu_bar and sigma_bar
+      N_landmarks = std::max((int) j_i+1, N_landmarks);
 
       MatrixXf H_k;
-      bool new_landmark = false;
-      if (j_i == N_landmarks)
-      {
-        //observation is a new landmark
-        N_landmarks++;
-        new_landmark = true;
-      }else
-      {
-        // not a new landmark
-        removeNewLandmark(); // remove potentially new landmark from mu_bar and sigma_bar
-      }
       H_k.resize(2,3+2*N_landmarks);
       H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
 
@@ -372,7 +366,6 @@ Perform maximum likelihood data association given observed landmarks.
   void landmarkCallback(const mrpt_msgs::ObservationRangeBearing::ConstPtr& msg)
   {
     timeLastMsg = msg->header.stamp;
-    start_ = ros::WallTime::now();
 
     if(!predictMotion())
     {
@@ -380,14 +373,16 @@ Perform maximum likelihood data association given observed landmarks.
       return;
     }
 
-    MLDataAssociation(msg);
-    ROS_INFO_COND(verbose,"Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
+    start_ = ros::WallTime::now();
+    MLDataAssociation(msg); // update step
     end_ = ros::WallTime::now();
-    float timex = (end_ - start_).toNSec() * 1e-6;
-    ROS_INFO_COND(verbose,"Update exectution time (ms): %f",timex);
-    sum_time += timex;
-    N_times++;
-    ROS_INFO_COND(verbose,"avg time = %f",sum_time/N_times);
+
+    sum_time += (end_ - start_).toNSec() * 1e-6;;
+    N_iterations++;
+
+    ROS_INFO_COND(verbose,"Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
+    ROS_INFO_COND(verbose,"Update exectution time (ms): %f",(end_ - start_).toNSec() * 1e-6);
+    ROS_INFO_COND(verbose,"Average computational time = %f",sum_time/N_iterations);
 
     publishTF();
     publishPose();
@@ -421,7 +416,7 @@ Perform maximum likelihood data association given observed landmarks.
     }
 
     tf::Transform odom_to_map_tf = tf::Transform(tf::Quaternion(odom_to_map.getRotation()), tf::Point(odom_to_map.getOrigin()));
-    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg+ros::Duration(0.06), "/map", "/odom"); //+ros::Duration(0.09)
+    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg+ros::Duration(0.07), "/map", "/odom"); //+ros::Duration(0.09)
     tf_broadcaster.sendTransform(map_to_odom);
   }
 
