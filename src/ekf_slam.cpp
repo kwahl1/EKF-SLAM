@@ -1,21 +1,13 @@
-#define EIGEN_NO_AUTOMATIC_RESIZING = 1;
+/*
+2D + heading EKF SLAM implementation.
 
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <sensor_msgs/PointCloud.h>
-#include <visualization_msgs/MarkerArray.h>
-#include <visualization_msgs/Marker.h>
-#include <mrpt_msgs/ObservationRangeBearing.h>
-#include <ros/ros.h>
-#include <cmath>
-#include <math.h>
-#include <tf/transform_listener.h>
-#include <tf/transform_broadcaster.h>
-#include <eigen3/Eigen/Dense>
-#include <cassert>
-#include <iostream>
+Written by Kristian Wahlqvist
+2019-04
+*/
+
+#include "ekf_slam/ekf_slam.h"
 
 using namespace Eigen;
-
 
 class EKFslam
 {
@@ -35,6 +27,7 @@ public:
   float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency, sum_time;
   int N_landmarks, N_times;
   bool verbose;
+
 
   EKFslam(ros::NodeHandle n)
   {
