@@ -24,21 +24,17 @@ public:
   tf::TransformListener tf_listener;
   tf::TransformBroadcaster tf_broadcaster;
   ros::Subscriber sub_landmarks;
-  ros::Publisher pub_mu;
-  ros::Publisher pub_pcl;
-  ros::Publisher pub_markers;
+  ros::Publisher pub_mu, pub_pcl, pub_markers;
   ros::Time timeLastMsg;
   ros::WallTime start_, end_;
   VectorXf mu; // state [x,y,theta]
   MatrixXf sigma;
   Matrix3f R;
+  Vector3f odom, previous_odom;
   Matrix2f Q;
-  Vector3f previous_odom;
-  Vector3f odom;
-  float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency;
-  int N_landmarks;
-  float sum_time;
-  int N_times;
+  float mahalanobis_threshold, std_motion_xy, std_motion_theta, std_sensor_range, std_sensor_bearing, std_new_landmark, uncertainty_scale, frequency, sum_time;
+  int N_landmarks, N_times;
+  bool verbose;
 
   EKFslam(ros::NodeHandle n)
   {
@@ -52,14 +48,20 @@ public:
 
   void init()
   {
+    ROS_INFO("initing");
     mu = VectorXf::Zero(3,1);
+    ROS_INFO("initing1");
     sigma = MatrixXf::Zero(3,3);
+    ROS_INFO("initing2");
     odom = Vector3f::Zero();
+    ROS_INFO("initing3");
     previous_odom = Vector3f::Zero();
+    ROS_INFO("initing4");
     N_landmarks = 0;
     N_times = 0;
+    ROS_INFO("get params");
 
-    // parameters loaded from config/params.yaml
+    // parameters loaded from config/
     nh.param<float>("std_motion_xy", std_motion_xy, 0.04f);
     nh.param<float>("std_motion_theta", std_motion_theta, 0.09f);
     nh.param<float>("std_sensor_range", std_sensor_range, 0.005f);
@@ -68,6 +70,7 @@ public:
     nh.param<float>("std_new_landmark", std_new_landmark, 0.1f);
     nh.param<float>("uncertainty_scale", uncertainty_scale, 0.1f);
     nh.param<float>("frequency", frequency, 10.0f);
+    nh.param<bool>("verbose", verbose, false);
 
     ROS_INFO("--- EKF SLAM Parameters ---");
     ROS_INFO("frequency: %f", frequency);
@@ -77,42 +80,22 @@ public:
     ROS_INFO("std_sensor_bearing: %f", std_sensor_bearing);
     ROS_INFO("mahalanobis_threshold: %f", mahalanobis_threshold);
     ROS_INFO("std_new_landmark: %f", std_new_landmark);
+    ROS_INFO("verbose: %i",verbose);
     ROS_INFO("---------------------------");
 
-    //std::chi_squared_distribution<float> distribution(2.0);
-    //float test = distribution(0.05f);
-    //ROS_INFO("Distance: %f",test);
-    bool do_square = false;
-
-    if (do_square)
-    {
-      R = Matrix3f::Identity(3,3);
-      R(0,0) = pow(std_motion_xy,2);
-      R(1,1) = pow(std_motion_xy,2);
-      R(2,2) = pow(2*M_PI*(std_motion_theta/360),2);
-
-      //observation noise
-      Q = Matrix2f::Identity(2,2);
-      Q(0,0) = pow(std_sensor_range,2);
-      Q(1,1) = pow(2*M_PI*(std_sensor_bearing/360),2);
-    }else
-    {
-      R = Matrix3f::Identity(3,3);
-      R(0,0) = std_motion_xy;
-      R(1,1) = std_motion_xy;
-      R(2,2) = 2*M_PI*(std_motion_theta/360);
-
-      //observation noise
-      Q = Matrix2f::Identity(2,2);
-      Q(0,0) = std_sensor_range;
-      Q(1,1) = 2*M_PI*(std_sensor_bearing/360);
-    }
     //motion noise
+    R = Matrix3f::Identity(3,3);
+    R(0,0) = std_motion_xy;
+    R(1,1) = std_motion_xy;
+    R(2,2) = 2*M_PI*(std_motion_theta/360);
 
-    ROS_INFO_STREAM("R: \n"<<R);
-    ROS_INFO_STREAM("Q: \n"<<Q);
+    //observation noise
+    Q = Matrix2f::Identity(2,2);
+    Q(0,0) = std_sensor_range;
+    Q(1,1) = 2*M_PI*(std_sensor_bearing/360);
 
-
+    ROS_INFO_STREAM_COND(verbose,"R: \n"<<R);
+    ROS_INFO_STREAM_COND(verbose,"Q: \n"<<Q);
   }
 
 
@@ -158,9 +141,9 @@ public:
 
     if ((odom.head(2)-previous_odom.head(2)).norm() > 1)
     {
-      ROS_WARN("Large prediction norm: %f",(odom.head(2)-previous_odom.head(2)).norm());
-      ROS_INFO_STREAM("Odom: "<<odom);
-      ROS_INFO_STREAM("previous_odom: "<<previous_odom);
+      ROS_WARN_COND(verbose,"Large prediction norm: %f",(odom.head(2)-previous_odom.head(2)).norm());
+      ROS_INFO_STREAM_COND(verbose,"Odom: "<<odom);
+      ROS_INFO_STREAM_COND(verbose,"previous_odom: "<<previous_odom);
       //return false;
     }
     previous_odom = odom; // save for next iteration
@@ -169,7 +152,7 @@ public:
     mu(2) = constrainAngle(mu(2));
     sigma.block(0,0,3,3) = G*sigma.block(0,0,3,3)*G.transpose()+R;
 
-    ROS_INFO("Prediction done mu=[%f,%f,%f] sigma=[%f,%f,%f]",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2));
+    ROS_INFO_COND(verbose,"Prediction done mu=[%f,%f,%f] sigma=[%f,%f,%f]",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2));
     return true;
   }
 
@@ -301,7 +284,7 @@ Perform maximum likelihood data association given observed landmarks.
     Matrix2f psi_k;
     VectorXf likelihood;
     Vector2f z_bar_k, nu_k;
-    ROS_INFO("MLDataAssociation. N_landmarks: %i, N_observations: %i",N_landmarks,N_observations);
+    ROS_INFO_COND(verbose,"MLDataAssociation. N_landmarks: %i, N_observations: %i",N_landmarks,N_observations);
 
     for(int i = 0; i < N_observations; i++)
     {
@@ -338,7 +321,6 @@ Perform maximum likelihood data association given observed landmarks.
         if (k==N_landmarks)
         {
           nu_k = Vector2f::Zero();
-          //psi_k = 1000*Matrix2f::Identity();
         }else
         {
           nu_k = z_i-z_bar_k;
@@ -348,8 +330,8 @@ Perform maximum likelihood data association given observed landmarks.
         likelihood(k) = nu_k.transpose()*psi_k.inverse()*nu_k;
         if (likelihood(k) < 0)
         {
-          likelihood(k) = -likelihood(k);
           ROS_ERROR("likelihood is < 0");
+          ros::shutdown();
         }
 
         // save for later
@@ -359,7 +341,6 @@ Perform maximum likelihood data association given observed landmarks.
       }
 
       likelihood(N_landmarks) = mahalanobis_threshold; // likelihood for new landmark
-      ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
       VectorXf::Index ind;
       likelihood.minCoeff(&ind); // get index for maximum likelihood
       int j_i = (int) ind;
@@ -369,9 +350,6 @@ Perform maximum likelihood data association given observed landmarks.
       if (j_i == N_landmarks)
       {
         //observation is a new landmark
-        //ROS_WARN("Observation is new landmark. j_i: %i, N_landmarks: %i, likeli.length(): %i",j_i,N_landmarks,likelihood.rows());
-        //ROS_INFO_STREAM("Nu: "<<nu.col(j_i));
-        //sigma.bottomRightCorner(2,2) = std_new_landmark*Matrix2f::Identity();
         N_landmarks++;
         new_landmark = true;
       }else
@@ -382,7 +360,7 @@ Perform maximum likelihood data association given observed landmarks.
       H_k.resize(2,3+2*N_landmarks);
       H_k = Map<MatrixXf>( H.col(j_i).data(),2,3+2*N_landmarks);
 
-      MatrixXf K;
+      MatrixXf K; // Kalman gain
       psi_k =  Map<Matrix2f>( psi.col(j_i).data(),2,2);
       K.noalias() = sigma*H_k.transpose()*psi_k.inverse();
 
@@ -390,28 +368,7 @@ Perform maximum likelihood data association given observed landmarks.
       mu.noalias() += K*nu.col(j_i);
       MatrixXf I = MatrixXf::Identity(sigma.rows(),sigma.cols());
       sigma = (I-K*H_k)*sigma;
-      //sigma = 0.5*sigma+0.5*sigma.transpose();
       mu(2) = constrainAngle(mu(2));
-      //ROS_INFO_STREAM("New sigma\n"<<sigma.diagonal().transpose());
-      //ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
-      if ((mu.head(2)-mu_prev).norm() > 1)
-      {
-        ROS_WARN("Large update norm: %f",(mu.head(2)-mu_prev).norm());
-        assert(K.hasNaN() == false);
-        assert(sigma.hasNaN() == false);
-        assert(psi_k.hasNaN() ==false);
-        assert(mu.hasNaN() == false);
-        ROS_INFO_STREAM("K: "<<K);
-        ROS_INFO_STREAM("likelihood: "<<likelihood.transpose());
-        ROS_INFO_STREAM("nu: "<<nu.col(j_i));
-        ROS_INFO("N_landmarks: %i, j_i: %i",N_landmarks,j_i);
-      }
-
-      if ( new_landmark && (nu.col(j_i).norm()) > 0)
-      {
-        ROS_ERROR("New landmark but innovation not 0. j_i: %i, N_landmarks: %i",j_i,N_landmarks);
-        ROS_INFO_STREAM("Nu: "<<nu.col(j_i));
-      }
     }
   }
 
@@ -426,20 +383,18 @@ Perform maximum likelihood data association given observed landmarks.
 
     if(!predictMotion())
     {
-      ROS_INFO("Skipped iteration.");
+      ROS_INFO_COND(verbose,"Skipped iteration.");
       return;
     }
-    //ROS_INFO("Prediction done");
-
 
     MLDataAssociation(msg);
-    ROS_INFO("Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
+    ROS_INFO_COND(verbose,"Update done.\n mu(%f,%f,%f) \nsigma (%f,%f,%f)\nN_landmarks = %i",mu(0),mu(1),mu(2),sigma(0,0),sigma(1,1),sigma(2,2),N_landmarks);
     end_ = ros::WallTime::now();
     float timex = (end_ - start_).toNSec() * 1e-6;
-    ROS_INFO("Update exectution time (ms): %f",timex);
+    ROS_INFO_COND(verbose,"Update exectution time (ms): %f",timex);
     sum_time += timex;
     N_times++;
-    ROS_INFO("avg = %f",sum_time/N_times);
+    ROS_INFO_COND(verbose,"avg time = %f",sum_time/N_times);
 
     publishTF();
     publishPose();
@@ -473,7 +428,7 @@ Perform maximum likelihood data association given observed landmarks.
     }
 
     tf::Transform odom_to_map_tf = tf::Transform(tf::Quaternion(odom_to_map.getRotation()), tf::Point(odom_to_map.getOrigin()));
-    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg+ros::Duration(0.09), "/map", "/odom");
+    tf::StampedTransform map_to_odom(odom_to_map_tf.inverse(), timeLastMsg+ros::Duration(0.06), "/map", "/odom"); //+ros::Duration(0.09)
     tf_broadcaster.sendTransform(map_to_odom);
   }
 

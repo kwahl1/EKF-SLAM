@@ -14,4 +14,9 @@
   <node pkg="rviz" type="rviz" name="rviz_nav" output="screen" args="-d $(find ekf_slam)/rviz/rviz_conf_lidar.rviz"></node>
 
   <node pkg="slam_tools" type="visualize_paths" name="path_visualize"/>
+
+  <node pkg="slam_tools" type="slam_error" name="slam_error" output="screen"/>
+
+  <node pkg="rosbag" type="play" name="rosbag_play" args="--clock --rate=1 /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/turn/turn_4500_1.bag /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/s_curve/done.bag"/>
+
 </launch>

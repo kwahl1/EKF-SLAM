@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Path4
       Splitter Ratio: 0.5
     Tree Height: 384
   - Class: rviz/Selection
@@ -216,61 +217,19 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 100
       Frames:
         All Enabled: false
-        GT_position_2D:
-          Value: false
-        GT_position_3D:
-          Value: false
-        GT_position_Image:
-          Value: false
-        base_link:
-          Value: true
-        imu_link:
-          Value: false
-        laser:
-          Value: false
-        map:
-          Value: true
-        odom:
-          Value: true
-        zed_center:
-          Value: false
-        zed_depth_camera:
-          Value: false
-        zed_left_camera:
-          Value: false
-        zed_right_camera:
-          Value: false
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          GT_position_2D:
-            {}
-          GT_position_3D:
-            {}
-          GT_position_Image:
-            {}
-          odom:
-            base_link:
-              imu_link:
-                {}
-              laser:
-                {}
-              zed_center:
-                zed_left_camera:
-                  zed_depth_camera:
-                    {}
-                zed_right_camera:
-                  {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Class: rviz/Image
       Enabled: true
       Image Topic: /rgb/image_raw_color
@@ -281,6 +240,29 @@ Visualization Manager:
       Normalize Range: true
       Queue Size: 2
       Transport Hint: compressed
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 25; 255; 255
+      Enabled: true
+      Head Diameter: 0.300000012
+      Head Length: 0.200000003
+      Length: 0.300000012
+      Line Style: Lines
+      Line Width: 0.0299999993
+      Name: Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.0299999993
+      Shaft Diameter: 0.100000001
+      Shaft Length: 0.100000001
+      Topic: /path_vesc
       Unreliable: false
       Value: true
   Enabled: true
@@ -308,16 +290,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 7.14673805
+      Distance: 9.27812862
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.32968116
-        Y: -0.943285346
-        Z: 0.104482703
+        X: 2.60607934
+        Y: 0.245126426
+        Z: 0.259516865
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false

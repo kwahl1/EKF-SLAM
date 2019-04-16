@@ -7,9 +7,7 @@
 
   <rosparam command="load" file="$(find ekf_slam)/config/params_libviso.yaml" />  
 
-
   <include file="$(find lidar_cone_detection)/launch/euclidean_clustering.launch"/>
-
 
   <node pkg="ekf_slam" type="ekf_slam" name="ekf_slam" output="screen"></node>
 
@@ -19,7 +17,7 @@
 
   <node pkg="slam_tools" type="slam_error" name="slam_error" output="screen"/>
 
-  <node pkg="rosbag" type="play" name="rosbag_play" args="--clock --rate=1.0 /home/kwahl/catkin_ws/src/bags/kth/s_curve/scurve_3000_2_viso.bag /home/kwahl/catkin_ws/src/bags/kth/s_curve/done.bag"/>
+  <node pkg="rosbag" type="play" name="rosbag_play" args="--clock --rate=0.5 /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/s_curve/viso/scurve_6000_4_viso.bag /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/s_curve/done.bag"/>
 
 
 </launch>

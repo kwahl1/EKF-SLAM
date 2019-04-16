@@ -216,61 +216,19 @@ Visualization Manager:
       Unreliable: false
       Value: true
     - Class: rviz/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 100
       Frames:
         All Enabled: false
-        GT_position_2D:
-          Value: false
-        GT_position_3D:
-          Value: false
-        GT_position_Image:
-          Value: false
-        base_link:
-          Value: true
-        imu_link:
-          Value: false
-        laser:
-          Value: false
-        map:
-          Value: true
-        odom:
-          Value: true
-        zed_center:
-          Value: false
-        zed_depth_camera:
-          Value: false
-        zed_left_camera:
-          Value: false
-        zed_right_camera:
-          Value: false
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          GT_position_2D:
-            {}
-          GT_position_3D:
-            {}
-          GT_position_Image:
-            {}
-          odom:
-            base_link:
-              imu_link:
-                {}
-              laser:
-                {}
-              zed_center:
-                zed_left_camera:
-                  zed_depth_camera:
-                    {}
-                zed_right_camera:
-                  {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Angle Tolerance: 0.100000001
       Class: rviz/Odometry
       Covariance:
@@ -342,25 +300,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 7.14673805
+      Distance: 6.23768091
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.32968116
-        Y: -0.943285346
-        Z: 0.104482703
+        X: 1.99914002
+        Y: 0.932029188
+        Z: 0.183869705
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.44979644
+      Pitch: 1.56979632
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.14043021
+      Yaw: 3.1354301
     Saved: ~
 Window Geometry:
   Displays:
