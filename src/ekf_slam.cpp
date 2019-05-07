@@ -45,18 +45,15 @@ private:
 
   void init()
   {
-    ROS_INFO("initing");
     mu = VectorXf::Zero(3,1);
-    ROS_INFO("initing1");
     sigma = MatrixXf::Zero(3,3);
-    ROS_INFO("initing2");
+    //sigma(0,0) = 1e-2;
+    //sigma(1,1) = 1e-2;
+    //sigma(2,2) = 2*M_PI*(5/360);
     odom = Vector3f::Zero();
-    ROS_INFO("initing3");
     previous_odom = Vector3f::Zero();
-    ROS_INFO("initing4");
     N_landmarks = 0;
     N_iterations = 0;
-    ROS_INFO("get params");
 
     // parameters loaded from config/
     nh.param<float>("std_motion_xy", std_motion_xy, 0.04f);
@@ -310,8 +307,12 @@ Perform maximum likelihood data association given observed landmarks.
         F_x_k(4,4+2*k) = 1;
 
         MatrixXf H_k;
+        Matrix2f Q_k;
+        Q_k = Q;
+        //Q_k(0,0) = z_i(0)*Q(0,0);
+        //Q_k(1,1) =
         H_k.noalias() = jacobianObservationModel(mu(3+2*k),mu(4+2*k))*F_x_k;
-        psi_k.noalias() = H_k*sigma*H_k.transpose()+Q;
+        psi_k.noalias() = H_k*sigma*H_k.transpose()+Q_k;
 
         nu_k = z_i-z_bar_k;
         nu_k(1) = constrainAngle(nu_k(1));
@@ -448,12 +449,12 @@ Perform maximum likelihood data association given observed landmarks.
       {
         marker.scale.x = uncertainty_scale*sigma(3+2*i,3+2*i);
         marker.scale.y = uncertainty_scale*sigma(4+2*i,4+2*i);
-        marker.scale.z = 0.001;
+        marker.scale.z = 0.0001;
       }
       marker.color.a = 1.0;
-      marker.color.r = 1.0;
-      marker.color.g = 1.0;
-      marker.color.b = 1.0;
+      marker.color.r = 0.6;
+      marker.color.g = 0.6;
+      marker.color.b = 0.6;
       marker.id = i;
 
       markerarray.markers.push_back(marker);
