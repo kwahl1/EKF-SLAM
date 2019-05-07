@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<launch>
+
+
+  <include file="$(find zed_wrapper)/launch/zed_camera.launch" />
+  <include file="$(find rplidar_ros)/launch/rplidar.launch" />
+
+
+  <rosparam command="load" file="$(find ekf_slam)/config/params_zed.yaml" />  
+
+  <include file="$(find lidar_cone_detection)/launch/euclidean_clustering.launch"/>
+
+  <node pkg="ekf_slam" type="ekf_slam" name="ekf_slam" output="screen"></node>
+
+  <node pkg="rviz" type="rviz" name="rviz_nav" output="screen" args="-d $(find ekf_slam)/rviz/rviz_conf_zed.rviz"></node>
+
+  <!--node pkg="slam_tools" type="visualize_paths" name="path_visualize"/-->
+
+  <!--node pkg="slam_tools" type="slam_error" name="slam_error" output="screen"/-->
+
+  <!--node pkg="rosbag" type="play" name="rosbag_play" args="clock rate=1 /home/nvidia/kwahl_ws/src/ekf_slam/bags/kth/track/viso/track_loops_3000_1_viso.bag /home/nvidia/kwahl_ws/src/ekf_slam/bags/kth/s_curve/done.bag"/-->
+
+
+</launch>
