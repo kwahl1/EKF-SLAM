@@ -20,6 +20,7 @@
   <depend>tf</depend>
   <depend>visualization_msgs</depend>
   <depend>message_generation</depend>
+  <depend>rviz_visual_tools</depend>
   <exec_depend>message_runtime</exec_depend>
 
 

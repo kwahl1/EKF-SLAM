@@ -14,6 +14,7 @@
 #include <cassert>
 #include <iostream>
 #include <algorithm> 
+#include <rviz_visual_tools/rviz_visual_tools.h>
 
 
 

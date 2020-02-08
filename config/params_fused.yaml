@@ -9,4 +9,4 @@ ekf_slam:
   mahalanobis_threshold: 5.991 # 5.991 = 95% confidence
   frequency: 15.0
   uncertainty_scale: 5 # scale visualization of landmark covariances
-  verbose: false # true/false
+  verbose: true # true/false

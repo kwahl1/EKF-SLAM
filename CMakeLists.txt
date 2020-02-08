@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
   message_generation
+  rviz_visual_tools
 )
 
 ## System dependencies are found with CMake's conventions
@@ -96,7 +97,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ekf_slam
-  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp std_msgs visualization_msgs
+  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp std_msgs visualization_msgs rviz_visual_tools
  message_generation tf 
 #  DEPENDS system_lib
 )

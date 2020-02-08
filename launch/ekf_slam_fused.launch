@@ -17,7 +17,7 @@
 
   <node pkg="slam_tools" type="slam_error" name="slam_error" output="screen"/>
 
-  <node pkg="rosbag" type="play" name="rosbag_play" args="--clock --rate=0.8 /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/track/track_3000_1.bag /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/s_curve/done.bag"/>
+  <node pkg="rosbag" type="play" name="rosbag_play" args="--clock --rate=0.8 /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/turn/turn_6000_4.bag /home/kwahl/catkin_ws/src/ekf_slam/bags/kth/s_curve/done.bag"/>
 
 
 </launch>

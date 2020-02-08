@@ -17,6 +17,7 @@ public:
   EKFslam(ros::NodeHandle n)
   {
     nh = n;
+    visual_tools.reset(new rviz_visual_tools::RvizVisualTools("map","/rviz_visual_markers"));
     sub_landmarks = nh.subscribe<mrpt_msgs::ObservationRangeBearing>("/landmark",1,&EKFslam::landmarkCallback,this);
     pub_mu = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/ekf_state",1);
     pub_pcl= nh.advertise<sensor_msgs::PointCloud>("/ekf_map",1);
@@ -26,6 +27,7 @@ public:
 
 private:
   ros::NodeHandle nh;
+  rviz_visual_tools::RvizVisualToolsPtr visual_tools;
   tf::TransformListener tf_listener;
   tf::TransformBroadcaster tf_broadcaster;
   ros::Subscriber sub_landmarks;
@@ -430,6 +432,7 @@ Perform maximum likelihood data association given observed landmarks.
   void publishMarkers()
   {
     visualization_msgs::MarkerArray markerarray;
+    //visual_tools->deleteAllMarkers();
 
     for (int i = 0; i < N_landmarks; i++)
     {
@@ -458,7 +461,17 @@ Perform maximum likelihood data association given observed landmarks.
       marker.id = i;
 
       markerarray.markers.push_back(marker);
+      /*
+      tf::Quaternion quat;
+      geometry_msgs::Quaternion quat_msg;
+      quat.setRPY(0, M_PI/2.0, 0.0);
+      tf::quaternionTFToMsg(quat, quat_msg);
+      marker.pose.orientation = quat_msg;
+      marker.pose.position.z = 0.1;
+      visual_tools->publishCone(marker.pose,-2.5*M_PI/6, rviz_visual_tools::WHITE, 0.1);
+      */
     }
+    //visual_tools->trigger();
     pub_markers.publish(markerarray);
   }
 
