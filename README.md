@@ -1,1 +1,4 @@
 # EKF-SLAM
+
+
+![](scurve.gif)
